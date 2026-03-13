@@ -235,18 +235,127 @@ void cfg_reset() {
   ESP.restart();
 }
 
-// ─── FORWARD DECLARATIONS (globals defined after web block) ─────────────────
-struct BatteryData;
-struct SolarData;
-struct InverterData;
-struct ChargerData;
-struct Stats;
-extern BatteryData  g_battery;
-extern SolarData    g_solar;
-extern InverterData g_inverter;
-extern ChargerData  g_charger;
-extern struct Stats stats;
-extern bool         mqtt_connected;
+// ─── CAN ID MAPPING ───────────────────────────────────────────────────────────
+// Maps XanBus PGNs to standard CAN IDs for downstream systems
+#define CAN_ID_BATTERY_VOLTAGE      0x100
+#define CAN_ID_BATTERY_CURRENT      0x101
+#define CAN_ID_BATTERY_SOC          0x102
+#define CAN_ID_BATTERY_TEMP         0x103
+#define CAN_ID_SOLAR_POWER          0x110
+#define CAN_ID_SOLAR_VOLTAGE        0x111
+#define CAN_ID_SOLAR_CURRENT        0x112
+#define CAN_ID_INVERTER_STATUS      0x120
+#define CAN_ID_INVERTER_AC_V        0x121
+#define CAN_ID_INVERTER_AC_HZ       0x122
+#define CAN_ID_INVERTER_KW          0x123
+#define CAN_ID_CHARGER_STATUS       0x130
+#define CAN_ID_CHARGER_MODE         0x131
+#define CAN_ID_SYSTEM_STATUS        0x140
+
+// ─── DATA STRUCTURES ─────────────────────────────────────────────────────────
+struct BatteryData {
+  float voltage;        // Volts
+  float current;        // Amps (positive = charge, negative = discharge)
+  float soc;            // State of Charge %
+  float temperature;    // Celsius
+  float capacity_ah;    // Amp-hours
+  uint8_t instance;
+  uint32_t timestamp;
+  bool valid;
+};
+
+struct SolarData {
+  float pv_voltage;     // Volts
+  float pv_current;     // Amps
+  float pv_power;       // Watts
+  float output_voltage; // Battery/output voltage
+  float output_current; // Output current
+  uint8_t controller_state; // 0=off, 1=MPPT, 2=bulk, 3=absorption, 4=float
+  uint8_t instance;
+  uint32_t timestamp;
+  bool valid;
+};
+
+struct InverterData {
+  float ac_voltage;     // Volts RMS
+  float ac_current;     // Amps RMS
+  float ac_frequency;   // Hz
+  float ac_power;       // Watts
+  float dc_input_v;     // DC input voltage
+  uint8_t state;        // 0=off, 1=standby, 2=inverting, 3=fault
+  uint8_t instance;
+  uint32_t timestamp;
+  bool valid;
+};
+
+struct ChargerData {
+  float output_voltage; // Volts
+  float output_current; // Amps
+  float input_voltage;  // AC input Volts
+  float input_current;  // AC input Amps
+  uint8_t mode;         // 0=off, 1=bulk, 2=absorption, 3=float, 4=equalize
+  uint8_t instance;
+  uint32_t timestamp;
+  bool valid;
+};
+
+// Global data store
+BatteryData  g_battery  = {0};
+SolarData    g_solar    = {0};
+InverterData g_inverter = {0};
+ChargerData  g_charger  = {0};
+
+// ─── XANBUS FRAME STRUCTURE ───────────────────────────────────────────────────
+// XanBus uses NMEA 2000 PGN framing over RS485
+// Frame: [SOF][Priority+PGN 4B][Source][Dest][DLC][Data...][CRC16][EOF]
+struct XanBusFrame {
+  uint8_t  priority;      // 0-7
+  uint32_t pgn;           // Parameter Group Number
+  uint8_t  source;        // Source address (0-253)
+  uint8_t  destination;   // Destination (255 = broadcast)
+  uint8_t  dlc;           // Data length 0-8 (or fast-packet length)
+  uint8_t  data[223];     // Up to 223 bytes (fast-packet)
+  uint16_t crc;
+  bool     fast_packet;
+  uint8_t  seq_id;
+  uint8_t  frame_count;
+};
+
+// ─── GLOBAL OBJECTS ───────────────────────────────────────────────────────────
+WiFiClient   wifiClient;
+PubSubClient mqttClient(wifiClient);
+MCP2515      mcp2515(CAN_CS_PIN);
+
+// RS485 receive buffer
+#define RS485_BUF_SIZE 512
+uint8_t  rs485_buf[RS485_BUF_SIZE];
+uint16_t rs485_buf_len = 0;
+
+// Fast-packet reassembly buffers (per source address)
+struct FastPacketBuffer {
+  uint8_t  data[223];
+  uint8_t  seq_id;
+  uint8_t  frames_received;
+  uint8_t  total_frames;
+  uint16_t total_bytes;
+  uint16_t bytes_received;
+  bool     active;
+  uint32_t start_time;
+};
+FastPacketBuffer fp_buffers[254]; // one per source address
+
+// Statistics
+struct Stats {
+  uint32_t frames_rx;
+  uint32_t frames_tx_can;
+  uint32_t mqtt_published;
+  uint32_t parse_errors;
+  uint32_t crc_errors;
+} stats = {0};
+
+uint32_t last_mqtt_publish = 0;
+uint32_t last_status_blink = 0;
+bool     mqtt_connected    = false;
 
 // ─── WEB INTERFACE (Dashboard + Settings, Passwortschutz) ────────────────────
 // Neue Felder in NetConfig für MQTT-Interval, Topic-Prefix, Web-Passwort
@@ -998,127 +1107,7 @@ static const char* mqtt_topic(const char* suffix) {
 #define PGN_XANBUS_SYSTEM_MODE      0x1FF01   // System Mode
 #define PGN_XANBUS_FAULT            0x1FF02   // Fault/Warning
 
-// ─── CAN ID MAPPING ───────────────────────────────────────────────────────────
-// Maps XanBus PGNs to standard CAN IDs for downstream systems
-#define CAN_ID_BATTERY_VOLTAGE      0x100
-#define CAN_ID_BATTERY_CURRENT      0x101
-#define CAN_ID_BATTERY_SOC          0x102
-#define CAN_ID_BATTERY_TEMP         0x103
-#define CAN_ID_SOLAR_POWER          0x110
-#define CAN_ID_SOLAR_VOLTAGE        0x111
-#define CAN_ID_SOLAR_CURRENT        0x112
-#define CAN_ID_INVERTER_STATUS      0x120
-#define CAN_ID_INVERTER_AC_V        0x121
-#define CAN_ID_INVERTER_AC_HZ       0x122
-#define CAN_ID_INVERTER_KW          0x123
-#define CAN_ID_CHARGER_STATUS       0x130
-#define CAN_ID_CHARGER_MODE         0x131
-#define CAN_ID_SYSTEM_STATUS        0x140
 
-// ─── DATA STRUCTURES ─────────────────────────────────────────────────────────
-struct BatteryData {
-  float voltage;        // Volts
-  float current;        // Amps (positive = charge, negative = discharge)
-  float soc;            // State of Charge %
-  float temperature;    // Celsius
-  float capacity_ah;    // Amp-hours
-  uint8_t instance;
-  uint32_t timestamp;
-  bool valid;
-};
-
-struct SolarData {
-  float pv_voltage;     // Volts
-  float pv_current;     // Amps
-  float pv_power;       // Watts
-  float output_voltage; // Battery/output voltage
-  float output_current; // Output current
-  uint8_t controller_state; // 0=off, 1=MPPT, 2=bulk, 3=absorption, 4=float
-  uint8_t instance;
-  uint32_t timestamp;
-  bool valid;
-};
-
-struct InverterData {
-  float ac_voltage;     // Volts RMS
-  float ac_current;     // Amps RMS
-  float ac_frequency;   // Hz
-  float ac_power;       // Watts
-  float dc_input_v;     // DC input voltage
-  uint8_t state;        // 0=off, 1=standby, 2=inverting, 3=fault
-  uint8_t instance;
-  uint32_t timestamp;
-  bool valid;
-};
-
-struct ChargerData {
-  float output_voltage; // Volts
-  float output_current; // Amps
-  float input_voltage;  // AC input Volts
-  float input_current;  // AC input Amps
-  uint8_t mode;         // 0=off, 1=bulk, 2=absorption, 3=float, 4=equalize
-  uint8_t instance;
-  uint32_t timestamp;
-  bool valid;
-};
-
-// Global data store
-BatteryData  g_battery  = {0};
-SolarData    g_solar    = {0};
-InverterData g_inverter = {0};
-ChargerData  g_charger  = {0};
-
-// ─── XANBUS FRAME STRUCTURE ───────────────────────────────────────────────────
-// XanBus uses NMEA 2000 PGN framing over RS485
-// Frame: [SOF][Priority+PGN 4B][Source][Dest][DLC][Data...][CRC16][EOF]
-struct XanBusFrame {
-  uint8_t  priority;      // 0-7
-  uint32_t pgn;           // Parameter Group Number
-  uint8_t  source;        // Source address (0-253)
-  uint8_t  destination;   // Destination (255 = broadcast)
-  uint8_t  dlc;           // Data length 0-8 (or fast-packet length)
-  uint8_t  data[223];     // Up to 223 bytes (fast-packet)
-  uint16_t crc;
-  bool     fast_packet;
-  uint8_t  seq_id;
-  uint8_t  frame_count;
-};
-
-// ─── GLOBAL OBJECTS ───────────────────────────────────────────────────────────
-WiFiClient   wifiClient;
-PubSubClient mqttClient(wifiClient);
-MCP2515      mcp2515(CAN_CS_PIN);
-
-// RS485 receive buffer
-#define RS485_BUF_SIZE 512
-uint8_t  rs485_buf[RS485_BUF_SIZE];
-uint16_t rs485_buf_len = 0;
-
-// Fast-packet reassembly buffers (per source address)
-struct FastPacketBuffer {
-  uint8_t  data[223];
-  uint8_t  seq_id;
-  uint8_t  frames_received;
-  uint8_t  total_frames;
-  uint16_t total_bytes;
-  uint16_t bytes_received;
-  bool     active;
-  uint32_t start_time;
-};
-FastPacketBuffer fp_buffers[254]; // one per source address
-
-// Statistics
-struct Stats {
-  uint32_t frames_rx;
-  uint32_t frames_tx_can;
-  uint32_t mqtt_published;
-  uint32_t parse_errors;
-  uint32_t crc_errors;
-} stats = {0};
-
-uint32_t last_mqtt_publish = 0;
-uint32_t last_status_blink = 0;
-bool     mqtt_connected    = false;
 
 // ─── UTILITY FUNCTIONS ────────────────────────────────────────────────────────
 // Decode signed 16-bit value from 2 bytes (little-endian) with resolution
