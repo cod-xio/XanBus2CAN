@@ -1,0 +1,760 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>XanBus Monitor — Schneider Energy System</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@300;400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:       #080c10;
+    --panel:    #0d1420;
+    --panel2:   #111a28;
+    --border:   #1a2d45;
+    --accent:   #00d4ff;
+    --accent2:  #00ff88;
+    --warn:     #ffaa00;
+    --danger:   #ff3355;
+    --solar:    #ffd700;
+    --inv:      #a855f7;
+    --chg:      #3b82f6;
+    --bat:      #10b981;
+    --text:     #c8d8e8;
+    --muted:    #4a6080;
+    --grid:     rgba(0,212,255,0.04);
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { width:100%; height:100%; overflow-x:hidden; }
+
+  body {
+    background: var(--bg);
+    background-image:
+      linear-gradient(var(--grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 40px 40px;
+    font-family: 'Rajdhani', sans-serif;
+    color: var(--text);
+    min-height: 100vh;
+  }
+
+  /* ── HEADER ───────────────────────────────────── */
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 28px;
+    background: linear-gradient(180deg, rgba(0,212,255,0.08) 0%, transparent 100%);
+    border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; z-index: 100;
+    backdrop-filter: blur(12px);
+  }
+  .logo {
+    display: flex; align-items: center; gap: 12px;
+  }
+  .logo-icon {
+    width: 38px; height: 38px;
+    background: conic-gradient(from 0deg, var(--accent), var(--accent2), var(--solar), var(--accent));
+    clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+    animation: logo-spin 8s linear infinite;
+    filter: drop-shadow(0 0 8px var(--accent));
+  }
+  @keyframes logo-spin { to { filter: hue-rotate(360deg) drop-shadow(0 0 8px var(--accent)); } }
+  .logo-text { font-size: 22px; font-weight: 700; letter-spacing: 3px; text-transform: uppercase; }
+  .logo-sub  { font-family: 'Share Tech Mono'; font-size: 10px; color: var(--muted); letter-spacing: 2px; margin-top: 2px; }
+
+  .header-right { display: flex; align-items: center; gap: 20px; }
+  .conn-status {
+    display: flex; align-items: center; gap: 8px;
+    font-family: 'Share Tech Mono'; font-size: 11px; color: var(--muted);
+  }
+  .conn-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--muted);
+    transition: all 0.3s;
+  }
+  .conn-dot.active { background: var(--accent2); box-shadow: 0 0 8px var(--accent2); animation: pulse 2s infinite; }
+  .conn-dot.warn   { background: var(--warn); box-shadow: 0 0 8px var(--warn); }
+  .conn-dot.error  { background: var(--danger); box-shadow: 0 0 8px var(--danger); }
+  @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.5; } }
+
+  .system-time {
+    font-family: 'Share Tech Mono'; font-size: 13px; color: var(--accent);
+    text-shadow: 0 0 10px rgba(0,212,255,0.5);
+  }
+
+  /* ── LAYOUT ───────────────────────────────────── */
+  .main { padding: 20px 28px; display: flex; flex-direction: column; gap: 20px; }
+
+  /* ── SYSTEM FLOW ─────────────────────────────── */
+  .system-flow {
+    display: grid;
+    grid-template-columns: 1fr 80px 1fr 80px 1fr 80px 1fr;
+    align-items: center;
+    gap: 0;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    position: relative;
+    overflow: hidden;
+  }
+  .system-flow::before {
+    content: '';
+    position: absolute; inset: 0;
+    background: radial-gradient(ellipse at 50% 50%, rgba(0,212,255,0.03) 0%, transparent 70%);
+    pointer-events: none;
+  }
+
+  .flow-node {
+    display: flex; flex-direction: column; align-items: center;
+    padding: 16px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--panel2);
+    transition: all 0.3s;
+    position: relative;
+    overflow: hidden;
+  }
+  .flow-node::after {
+    content: '';
+    position: absolute; bottom: 0; left: 0; right: 0; height: 2px;
+  }
+  .flow-node.battery::after  { background: var(--bat); box-shadow: 0 0 6px var(--bat); }
+  .flow-node.solar::after    { background: var(--solar); box-shadow: 0 0 6px var(--solar); }
+  .flow-node.inverter::after { background: var(--inv); box-shadow: 0 0 6px var(--inv); }
+  .flow-node.charger::after  { background: var(--chg); box-shadow: 0 0 6px var(--chg); }
+
+  .flow-icon { font-size: 28px; margin-bottom: 6px; }
+  .flow-label { font-size: 11px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: var(--muted); }
+  .flow-value { font-family: 'Share Tech Mono'; font-size: 22px; margin: 4px 0; }
+  .flow-value.bat-color  { color: var(--bat); text-shadow: 0 0 10px rgba(16,185,129,0.5); }
+  .flow-value.sol-color  { color: var(--solar); text-shadow: 0 0 10px rgba(255,215,0,0.5); }
+  .flow-value.inv-color  { color: var(--inv); text-shadow: 0 0 10px rgba(168,85,247,0.5); }
+  .flow-value.chg-color  { color: var(--chg); text-shadow: 0 0 10px rgba(59,130,246,0.5); }
+  .flow-sub { font-size: 12px; color: var(--muted); }
+
+  .flow-arrow {
+    display: flex; align-items: center; justify-content: center;
+    position: relative;
+  }
+  .arrow-line {
+    width: 60px; height: 2px;
+    background: linear-gradient(90deg, var(--border), var(--accent), var(--border));
+    position: relative;
+    overflow: hidden;
+  }
+  .arrow-line::after {
+    content: '';
+    position: absolute; inset: 0;
+    background: linear-gradient(90deg, transparent, white, transparent);
+    animation: flow-anim 1.5s linear infinite;
+  }
+  @keyframes flow-anim { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
+  .arrow-head {
+    width: 0; height: 0;
+    border-top: 5px solid transparent;
+    border-bottom: 5px solid transparent;
+    border-left: 8px solid var(--accent);
+    filter: drop-shadow(0 0 3px var(--accent));
+  }
+
+  /* ── DETAIL GRID ─────────────────────────────── */
+  .detail-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+  }
+
+  .detail-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.3s;
+  }
+  .detail-card:hover { border-color: var(--accent); }
+  .detail-card.bat { --card-color: var(--bat); }
+  .detail-card.sol { --card-color: var(--solar); }
+  .detail-card.inv { --card-color: var(--inv); }
+  .detail-card.chg { --card-color: var(--chg); }
+
+  .detail-card::before {
+    content: '';
+    position: absolute; top: 0; left: 0; right: 0; height: 3px;
+    background: var(--card-color);
+    box-shadow: 0 0 8px var(--card-color);
+  }
+
+  .card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+  .card-title  { font-size: 13px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: var(--muted); }
+  .card-badge  {
+    font-family: 'Share Tech Mono'; font-size: 10px; padding: 2px 8px;
+    border: 1px solid var(--card-color); border-radius: 3px; color: var(--card-color);
+    text-shadow: 0 0 6px var(--card-color);
+  }
+
+  .metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .metric { }
+  .metric-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; }
+  .metric-value {
+    font-family: 'Share Tech Mono'; font-size: 20px; color: var(--text);
+    transition: color 0.3s;
+  }
+  .metric-value.highlight { color: var(--card-color); text-shadow: 0 0 8px var(--card-color); }
+  .metric-unit { font-size: 11px; color: var(--muted); margin-left: 3px; }
+
+  /* ── SOC BAR ─────────────────────────────────── */
+  .soc-container { margin-top: 12px; }
+  .soc-bar-bg {
+    height: 6px; background: var(--border); border-radius: 3px;
+    overflow: hidden; margin-top: 4px;
+  }
+  .soc-bar {
+    height: 100%; border-radius: 3px;
+    transition: width 1s ease;
+    background: linear-gradient(90deg, var(--danger), var(--warn), var(--bat));
+  }
+  .soc-label { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin-top: 3px; }
+
+  /* ── BOTTOM ROW ──────────────────────────────── */
+  .bottom-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+
+  /* ── CHART ───────────────────────────────────── */
+  .chart-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px;
+  }
+  .chart-title { font-size: 13px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: var(--muted); margin-bottom: 12px; }
+  canvas { width: 100% !important; }
+
+  /* ── LOG TABLE ───────────────────────────────── */
+  .log-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px;
+    max-height: 320px;
+    overflow: hidden;
+    display: flex; flex-direction: column;
+  }
+  .log-title { font-size: 13px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; flex-shrink: 0; }
+  .log-body { overflow-y: auto; flex: 1; }
+  .log-body::-webkit-scrollbar { width: 4px; }
+  .log-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .log-entry {
+    display: grid; grid-template-columns: 90px 70px 1fr;
+    gap: 8px; padding: 5px 0;
+    border-bottom: 1px solid rgba(26,45,69,0.5);
+    font-family: 'Share Tech Mono'; font-size: 11px;
+    animation: log-in 0.3s ease;
+  }
+  @keyframes log-in { from { opacity:0; transform: translateX(-8px); } to { opacity:1; transform: none; } }
+  .log-time   { color: var(--muted); }
+  .log-type   { border-radius: 2px; padding: 0 4px; font-weight: 600; text-align: center; }
+  .log-type.BAT { background: rgba(16,185,129,0.2); color: var(--bat); }
+  .log-type.SOL { background: rgba(255,215,0,0.2); color: var(--solar); }
+  .log-type.INV { background: rgba(168,85,247,0.2); color: var(--inv); }
+  .log-type.CHG { background: rgba(59,130,246,0.2); color: var(--chg); }
+  .log-type.ERR { background: rgba(255,51,85,0.2); color: var(--danger); }
+  .log-type.SYS { background: rgba(0,212,255,0.15); color: var(--accent); }
+  .log-msg    { color: var(--text); }
+
+  /* ── STATS BAR ───────────────────────────────── */
+  .stats-bar {
+    display: flex; gap: 20px; align-items: center;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+    padding: 10px 18px; font-family: 'Share Tech Mono'; font-size: 11px;
+  }
+  .stat-item { display: flex; align-items: center; gap: 6px; color: var(--muted); }
+  .stat-value { color: var(--accent); font-weight: 600; }
+  .stat-sep { color: var(--border); }
+
+  /* ── RESPONSIVE ─────────────────────────────── */
+  @media (max-width: 1200px) {
+    .detail-grid { grid-template-columns: 1fr 1fr; }
+    .system-flow { grid-template-columns: 1fr; gap: 10px; }
+    .flow-arrow { transform: rotate(90deg); }
+  }
+  @media (max-width: 768px) {
+    .main { padding: 12px; }
+    .bottom-row { grid-template-columns: 1fr; }
+    header { padding: 10px 14px; }
+  }
+
+  /* ── SCAN LINE EFFECT ────────────────────────── */
+  body::after {
+    content: '';
+    position: fixed; inset: 0; pointer-events: none;
+    background: repeating-linear-gradient(
+      0deg, transparent, transparent 2px,
+      rgba(0,0,0,0.03) 2px, rgba(0,0,0,0.03) 4px
+    );
+    z-index: 9999;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon"></div>
+    <div>
+      <div class="logo-text">XanBus Monitor</div>
+      <div class="logo-sub">SCHNEIDER ELECTRIC · XANTREX · CAN-BRIDGE v1.0</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <div class="conn-status">
+      <div class="conn-dot" id="rs485-dot"></div>RS485
+    </div>
+    <div class="conn-status">
+      <div class="conn-dot" id="can-dot"></div>CAN
+    </div>
+    <div class="conn-status">
+      <div class="conn-dot" id="mqtt-dot"></div>MQTT
+    </div>
+    <div class="conn-status">
+      <div class="conn-dot active" id="ws-dot"></div>WS
+    </div>
+    <div class="system-time" id="clock">--:--:--</div>
+  </div>
+</header>
+
+<div class="main">
+
+  <!-- SYSTEM FLOW DIAGRAM -->
+  <div class="system-flow">
+    <div class="flow-node solar">
+      <div class="flow-icon">☀️</div>
+      <div class="flow-label">Solar PV</div>
+      <div class="flow-value sol-color" id="fl-pv-power">-- W</div>
+      <div class="flow-sub" id="fl-pv-voltage">-- V</div>
+    </div>
+    <div class="flow-arrow"><div class="arrow-line"></div><div class="arrow-head"></div></div>
+    <div class="flow-node charger">
+      <div class="flow-icon">🔌</div>
+      <div class="flow-label">Charger</div>
+      <div class="flow-value chg-color" id="fl-chg-mode">--</div>
+      <div class="flow-sub" id="fl-chg-current">-- A</div>
+    </div>
+    <div class="flow-arrow"><div class="arrow-line"></div><div class="arrow-head"></div></div>
+    <div class="flow-node battery">
+      <div class="flow-icon">🔋</div>
+      <div class="flow-label">Battery</div>
+      <div class="flow-value bat-color" id="fl-bat-voltage">-- V</div>
+      <div class="flow-sub" id="fl-bat-soc">SOC: --%</div>
+    </div>
+    <div class="flow-arrow"><div class="arrow-line"></div><div class="arrow-head"></div></div>
+    <div class="flow-node inverter">
+      <div class="flow-icon">⚡</div>
+      <div class="flow-label">Inverter</div>
+      <div class="flow-value inv-color" id="fl-inv-ac">-- VAC</div>
+      <div class="flow-sub" id="fl-inv-state">--</div>
+    </div>
+  </div>
+
+  <!-- DETAIL CARDS -->
+  <div class="detail-grid">
+
+    <!-- Battery -->
+    <div class="detail-card bat">
+      <div class="card-header">
+        <span class="card-title">Battery</span>
+        <span class="card-badge" id="bat-state">UNKNOWN</span>
+      </div>
+      <div class="metrics">
+        <div class="metric">
+          <div class="metric-label">Voltage</div>
+          <div class="metric-value highlight" id="bat-voltage">--<span class="metric-unit">V</span></div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Current</div>
+          <div class="metric-value" id="bat-current">--<span class="metric-unit">A</span></div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Temperature</div>
+          <div class="metric-value" id="bat-temp">--<span class="metric-unit">°C</span></div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Capacity</div>
+          <div class="metric-value" id="bat-cap">--<span class="metric-unit">Ah</span></div>
+        </div>
+      </div>
+      <div class="soc-container">
+        <div class="metric-label">State of Charge</div>
+        <div class="soc-bar-bg">
+          <div class="soc-bar" id="soc-bar" style="width:0%"></div>
+        </div>
+        <div class="soc-label">
+          <span>0%</span>
+          <span id="soc-pct" style="color:var(--bat);font-family:'Share Tech Mono'">--%</span>
+          <span>100%</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Solar -->
+    <div class="detail-card sol">
+      <div class="card-header">
+        <span class="card-title">Solar Controller</span>
+        <span class="card-badge" id="sol-state">OFF</span>
+      </div>
+      <div class="metrics">
+        <div class="metric">
+          <div class="metric-label">PV Voltage</div>
+          <div class="metric-value highlight" id="sol-pv-v">--<span class="metric-unit">V</span></div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">PV Current</div>
+          <div class="metric-value" id="sol-pv-i">--<span class="metric-unit">A</span></div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">PV Power</div>
+          <div class="metric-value highlight" id="sol-pv-p">--<span class="metric-unit">W</span></div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Output V</div>
+          <div class="metric-value" id="sol-out-v">--<span class="metric-unit">V</span></div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Today</div>
+          <div class="metric-value" id="sol-daily">--<span class="metric-unit">Wh</span></div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Total</div>
+          <div class="metric-value" id="sol-total">--<span class="metric-unit">kWh</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Inverter -->
+    <div class="detail-card inv">
+      <div class="card-header">
+        <span class="card-title">Inverter</span>
+        <span class="card-badge" id="inv-state">OFF</span>
+      </div>
+      <div class="metrics">
+        <div class="metric">
+          <div class="metric-label">AC Voltage</div>
+          <div class="metric-value highlight" id="inv-ac-v">--<span class="metric-unit">V</span></div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">AC Current</div>
+          <div class="metric-value" id="inv-ac-i">--<span class="metric-unit">A</span></div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Frequency</div>
+          <div class="metric-value" id="inv-ac-hz">--<span class="metric-unit">Hz</span></div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Power</div>
+          <div class="metric-value highlight" id="inv-ac-w">--<span class="metric-unit">W</span></div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">DC Input</div>
+          <div class="metric-value" id="inv-dc-v">--<span class="metric-unit">V</span></div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Efficiency</div>
+          <div class="metric-value" id="inv-eff">--<span class="metric-unit">%</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Charger -->
+    <div class="detail-card chg">
+      <div class="card-header">
+        <span class="card-title">Charger</span>
+        <span class="card-badge" id="chg-mode">OFF</span>
+      </div>
+      <div class="metrics">
+        <div class="metric">
+          <div class="metric-label">Output V</div>
+          <div class="metric-value highlight" id="chg-out-v">--<span class="metric-unit">V</span></div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Output A</div>
+          <div class="metric-value" id="chg-out-i">--<span class="metric-unit">A</span></div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">AC Input V</div>
+          <div class="metric-value" id="chg-in-v">--<span class="metric-unit">V</span></div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">AC Input A</div>
+          <div class="metric-value" id="chg-in-i">--<span class="metric-unit">A</span></div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Input Hz</div>
+          <div class="metric-value" id="chg-in-hz">--<span class="metric-unit">Hz</span></div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Charge Power</div>
+          <div class="metric-value highlight" id="chg-power">--<span class="metric-unit">W</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BOTTOM ROW: Chart + Log -->
+  <div class="bottom-row">
+    <div class="chart-card">
+      <div class="chart-title">⚡ Power Flow — 60s History</div>
+      <canvas id="chart" height="160"></canvas>
+    </div>
+    <div class="log-card">
+      <div class="log-title">📡 Protocol Log</div>
+      <div class="log-body" id="log-body"></div>
+    </div>
+  </div>
+
+  <!-- STATS BAR -->
+  <div class="stats-bar">
+    <div class="stat-item">RS485 Frames: <span class="stat-value" id="st-rx">0</span></div>
+    <div class="stat-sep">|</div>
+    <div class="stat-item">CAN TX: <span class="stat-value" id="st-can">0</span></div>
+    <div class="stat-sep">|</div>
+    <div class="stat-item">MQTT Pub: <span class="stat-value" id="st-mqtt">0</span></div>
+    <div class="stat-sep">|</div>
+    <div class="stat-item">CRC Errors: <span class="stat-value" id="st-crc">0</span></div>
+    <div class="stat-sep">|</div>
+    <div class="stat-item">Uptime: <span class="stat-value" id="st-uptime">--</span></div>
+    <div class="stat-sep">|</div>
+    <div class="stat-item">Last Update: <span class="stat-value" id="st-update">--</span></div>
+  </div>
+
+</div>
+
+<script>
+// ─── CHART MINI ───────────────────────────────────────────────────────────────
+const canvas = document.getElementById('chart');
+const ctx    = canvas.getContext('2d');
+const MAX_PTS = 60;
+
+const series = {
+  solar:   { color: '#ffd700', data: [], label: 'Solar W' },
+  load:    { color: '#a855f7', data: [], label: 'Load W' },
+  charge:  { color: '#3b82f6', data: [], label: 'Charge W' },
+  battery: { color: '#10b981', data: [], label: 'Bat V×10' },
+};
+
+function pushData(bat, sol, inv, chg) {
+  const push = (arr, v) => { arr.push(v ?? 0); if (arr.length > MAX_PTS) arr.shift(); };
+  push(series.solar.data,   sol?.pv_power   ?? 0);
+  push(series.load.data,    inv?.ac_power   ?? 0);
+  push(series.charge.data,  chg?.output_voltage ? (chg.output_voltage * (chg.output_current ?? 0)) : 0);
+  push(series.battery.data, (bat?.voltage ?? 0) * 10);
+}
+
+function drawChart() {
+  const w = canvas.parentElement.clientWidth - 36;
+  const h = 160;
+  canvas.width  = w;
+  canvas.height = h;
+
+  ctx.fillStyle = 'rgba(13,20,32,0.8)';
+  ctx.fillRect(0, 0, w, h);
+
+  // Grid
+  ctx.strokeStyle = 'rgba(26,45,69,0.6)';
+  ctx.lineWidth = 1;
+  for (let i = 0; i <= 4; i++) {
+    const y = h * i / 4;
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+  }
+
+  // Find max
+  let maxVal = 1;
+  Object.values(series).forEach(s => s.data.forEach(v => { if (v > maxVal) maxVal = v; }));
+  maxVal = Math.ceil(maxVal / 100) * 100 || 100;
+
+  // Draw series
+  Object.values(series).forEach(s => {
+    if (!s.data.length) return;
+    ctx.beginPath();
+    ctx.strokeStyle = s.color;
+    ctx.lineWidth = 1.5;
+    ctx.shadowColor = s.color;
+    ctx.shadowBlur  = 4;
+    s.data.forEach((v, i) => {
+      const x = (i / (MAX_PTS - 1)) * w;
+      const y = h - (v / maxVal) * h * 0.9 - h * 0.05;
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+  });
+
+  // Legend
+  let lx = 8;
+  ctx.font = '10px Rajdhani';
+  Object.values(series).forEach(s => {
+    ctx.fillStyle = s.color;
+    ctx.fillRect(lx, 6, 10, 10); lx += 12;
+    ctx.fillStyle = '#4a6080';
+    ctx.fillText(s.label, lx, 15); lx += ctx.measureText(s.label).width + 14;
+  });
+}
+
+setInterval(drawChart, 1000);
+
+// ─── HELPERS ─────────────────────────────────────────────────────────────────
+const fmt = (v, dec=1) => v != null && !isNaN(v) ? (+v).toFixed(dec) : '--';
+const el = id => document.getElementById(id);
+
+function setEl(id, html)   { const e = el(id); if (e) e.innerHTML = html; }
+function setText(id, text) { const e = el(id); if (e) e.textContent = text; }
+
+function updateBattery(b) {
+  if (!b) return;
+  const v = b.voltage, i = b.current, s = b.soc, t = b.temperature, c = b.capacity_ah;
+  setEl('bat-voltage', `${fmt(v,2)}<span class="metric-unit">V</span>`);
+  setEl('bat-current', `${fmt(i,1)}<span class="metric-unit">A</span>`);
+  setEl('bat-temp',    `${fmt(t,1)}<span class="metric-unit">°C</span>`);
+  setEl('bat-cap',     `${fmt(c,0)}<span class="metric-unit">Ah</span>`);
+  setText('bat-state', b.state?.toUpperCase() || 'UNKNOWN');
+  const soc = s ?? 0;
+  el('soc-bar').style.width = Math.min(100, Math.max(0, soc)) + '%';
+  setEl('soc-pct', `${fmt(s,1)}%`);
+  setEl('fl-bat-voltage', `${fmt(v,2)} V`);
+  setEl('fl-bat-soc', `SOC: ${fmt(s,1)}%`);
+}
+
+function updateSolar(s) {
+  if (!s) return;
+  setEl('sol-pv-v',  `${fmt(s.pv_voltage,1)}<span class="metric-unit">V</span>`);
+  setEl('sol-pv-i',  `${fmt(s.pv_current,1)}<span class="metric-unit">A</span>`);
+  setEl('sol-pv-p',  `${fmt(s.pv_power,0)}<span class="metric-unit">W</span>`);
+  setEl('sol-out-v', `${fmt(s.output_voltage,2)}<span class="metric-unit">V</span>`);
+  setEl('sol-daily', `${fmt(s.daily_yield_wh,0)}<span class="metric-unit">Wh</span>`);
+  setEl('sol-total', `${fmt(s.total_yield_kwh,1)}<span class="metric-unit">kWh</span>`);
+  setText('sol-state', s.controller_state?.toUpperCase() || 'OFF');
+  setEl('fl-pv-power',   `${fmt(s.pv_power,0)} W`);
+  setEl('fl-pv-voltage', `${fmt(s.pv_voltage,1)} V`);
+}
+
+function updateInverter(inv) {
+  if (!inv) return;
+  setEl('inv-ac-v',  `${fmt(inv.ac_voltage,1)}<span class="metric-unit">V</span>`);
+  setEl('inv-ac-i',  `${fmt(inv.ac_current,1)}<span class="metric-unit">A</span>`);
+  setEl('inv-ac-hz', `${fmt(inv.ac_frequency,2)}<span class="metric-unit">Hz</span>`);
+  setEl('inv-ac-w',  `${fmt(inv.ac_power,0)}<span class="metric-unit">W</span>`);
+  setEl('inv-dc-v',  `${fmt(inv.dc_input_v,2)}<span class="metric-unit">V</span>`);
+  const eff = (inv.dc_input_v && inv.ac_power && inv.ac_current)
+    ? (inv.ac_power / (inv.dc_input_v * inv.ac_current * 1.05) * 100) : null;
+  setEl('inv-eff', `${fmt(eff,1)}<span class="metric-unit">%</span>`);
+  setText('inv-state', inv.state?.toUpperCase() || 'OFF');
+  setEl('fl-inv-ac',    `${fmt(inv.ac_voltage,1)} VAC`);
+  setEl('fl-inv-state', inv.state || '--');
+}
+
+function updateCharger(c) {
+  if (!c) return;
+  setEl('chg-out-v', `${fmt(c.output_voltage,2)}<span class="metric-unit">V</span>`);
+  setEl('chg-out-i', `${fmt(c.output_current,1)}<span class="metric-unit">A</span>`);
+  setEl('chg-in-v',  `${fmt(c.input_voltage,1)}<span class="metric-unit">V</span>`);
+  setEl('chg-in-i',  `${fmt(c.input_current,1)}<span class="metric-unit">A</span>`);
+  setEl('chg-in-hz', `${fmt(c.input_frequency,2)}<span class="metric-unit">Hz</span>`);
+  const cp = (c.output_voltage && c.output_current) ? c.output_voltage * c.output_current : null;
+  setEl('chg-power', `${fmt(cp,0)}<span class="metric-unit">W</span>`);
+  setText('chg-mode', c.mode?.toUpperCase() || 'OFF');
+  setEl('fl-chg-mode',    c.mode || '--');
+  setEl('fl-chg-current', `${fmt(c.output_current,1)} A`);
+}
+
+// ─── LOG ─────────────────────────────────────────────────────────────────────
+const logBody = el('log-body');
+let logCount  = 0;
+
+function addLog(type, msg) {
+  const row = document.createElement('div');
+  row.className = 'log-entry';
+  const now = new Date();
+  const ts  = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
+  row.innerHTML = `<span class="log-time">${ts}</span><span class="log-type ${type}">${type}</span><span class="log-msg">${msg}</span>`;
+  logBody.insertBefore(row, logBody.firstChild);
+  if (++logCount > 100) logBody.removeChild(logBody.lastChild);
+}
+
+// ─── API POLLING ─────────────────────────────────────────────────────────────
+let lastData = null;
+let wsActive = false;
+
+async function fetchStatus() {
+  try {
+    const r = await fetch('/api/status');
+    const d = await r.json();
+    handleData(d);
+  } catch(e) {
+    el('rs485-dot').className = 'conn-dot error';
+  }
+}
+
+function handleData(d) {
+  const { battery: b, solar: s, inverter: inv, charger: c, stats } = d;
+  updateBattery(b);
+  updateSolar(s);
+  updateInverter(inv);
+  updateCharger(c);
+  pushData(b, s, inv, c);
+
+  // Stats
+  if (stats) {
+    setText('st-rx',    stats.frames_total ?? stats.frames_rx ?? 0);
+    setText('st-can',   stats.frames_tx_can ?? '--');
+    setText('st-mqtt',  stats.mqtt_published ?? '--');
+    setText('st-crc',   stats.crc_errors ?? 0);
+  }
+  setText('st-update', new Date().toLocaleTimeString('de-DE'));
+
+  // Connection dots
+  const age = ms => b?.ts ? (Date.now()/1000 - b.ts) < ms/1000 : false;
+  el('rs485-dot').className = 'conn-dot ' + (age(5000) ? 'active' : 'warn');
+
+  // Log snippets
+  if (!lastData) { addLog('SYS', 'Connected to XanBus Bridge'); }
+  if (b && b.voltage) addLog('BAT', `${fmt(b.voltage,2)}V  ${fmt(b.current,1)}A  SOC:${fmt(b.soc,1)}%`);
+  if (s && s.pv_power > 1) addLog('SOL', `PV: ${fmt(s.pv_power,0)}W @ ${fmt(s.pv_voltage,1)}V — ${s.controller_state}`);
+  if (inv && inv.state !== 'Off') addLog('INV', `${fmt(inv.ac_voltage,1)}VAC ${fmt(inv.ac_frequency,2)}Hz ${fmt(inv.ac_power,0)}W`);
+  if (c && c.mode !== 'Off') addLog('CHG', `${c.mode}: ${fmt(c.output_current,1)}A @ ${fmt(c.output_voltage,2)}V`);
+  lastData = d;
+}
+
+// ─── WEBSOCKET ────────────────────────────────────────────────────────────────
+function connectWS() {
+  const ws = new WebSocket(`ws://${location.host}/ws`);
+  ws.onopen    = () => { wsActive = true; el('ws-dot').className = 'conn-dot active'; addLog('SYS', 'WebSocket connected'); };
+  ws.onmessage = e => { try { handleData(JSON.parse(e.data)); } catch(err){} };
+  ws.onclose   = () => { wsActive = false; el('ws-dot').className = 'conn-dot warn'; setTimeout(connectWS, 3000); };
+  ws.onerror   = () => { el('ws-dot').className = 'conn-dot error'; };
+}
+
+// ─── CLOCK ───────────────────────────────────────────────────────────────────
+function updateClock() {
+  const now = new Date();
+  setText('clock', now.toLocaleTimeString('de-DE'));
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// ─── UPTIME ──────────────────────────────────────────────────────────────────
+const startTime = Date.now();
+setInterval(() => {
+  const s = Math.floor((Date.now() - startTime) / 1000);
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+  setText('st-uptime', `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`);
+}, 1000);
+
+// ─── START ───────────────────────────────────────────────────────────────────
+connectWS();
+setInterval(fetchStatus, 2000);
+fetchStatus();
+addLog('SYS', 'XanBus Monitor initialized — Schneider XW+ / MPPT 80-600 / SW Plus');
+addLog('SYS', 'Protocol: NMEA 2000 over RS485 (XanBus) → CAN 2.0B @ 250kbps');
+</script>
+</body>
+</html>
