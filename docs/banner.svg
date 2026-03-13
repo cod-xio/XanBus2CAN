@@ -1,0 +1,99 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 200" width="900" height="200">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%"   stop-color="#080c10"/>
+      <stop offset="100%" stop-color="#0d1420"/>
+    </linearGradient>
+    <linearGradient id="acc" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%"   stop-color="#00d4ff"/>
+      <stop offset="50%"  stop-color="#00ff88"/>
+      <stop offset="100%" stop-color="#ffd700"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="900" height="200" fill="url(#bg)" rx="8"/>
+
+  <!-- Grid pattern -->
+  <g stroke="#1a2d45" stroke-width="0.5" opacity="0.4">
+    <line x1="0" y1="40" x2="900" y2="40"/>
+    <line x1="0" y1="80" x2="900" y2="80"/>
+    <line x1="0" y1="120" x2="900" y2="120"/>
+    <line x1="0" y1="160" x2="900" y2="160"/>
+    <line x1="150" y1="0" x2="150" y2="200"/>
+    <line x1="300" y1="0" x2="300" y2="200"/>
+    <line x1="450" y1="0" x2="450" y2="200"/>
+    <line x1="600" y1="0" x2="600" y2="200"/>
+    <line x1="750" y1="0" x2="750" y2="200"/>
+  </g>
+
+  <!-- Accent bar top -->
+  <rect x="0" y="0" width="900" height="3" fill="url(#acc)" rx="2"/>
+
+  <!-- Hexagon icon -->
+  <polygon points="50,30 78,45 78,75 50,90 22,75 22,45" fill="none" stroke="#00d4ff" stroke-width="2" filter="url(#glow)"/>
+  <polygon points="50,40 68,50 68,70 50,80 32,70 32,50" fill="#00d4ff" opacity="0.15"/>
+  <text x="50" y="68" text-anchor="middle" font-size="22" fill="#00d4ff" filter="url(#glow)">⚡</text>
+
+  <!-- Title -->
+  <text x="100" y="62" font-family="monospace" font-size="32" font-weight="bold" fill="#c8d8e8" letter-spacing="2">XanBus2CAN</text>
+  <text x="100" y="85" font-family="monospace" font-size="12" fill="#4a6080" letter-spacing="3">SCHNEIDER ELECTRIC · XANTREX · PROTOCOL BRIDGE</text>
+
+  <!-- Flow diagram -->
+  <!-- Solar node -->
+  <rect x="60" y="115" width="100" height="50" fill="#0d1420" stroke="#ffd700" stroke-width="1.5" rx="6"/>
+  <text x="110" y="136" text-anchor="middle" font-family="monospace" font-size="11" fill="#ffd700">☀ SOLAR</text>
+  <text x="110" y="153" text-anchor="middle" font-family="monospace" font-size="10" fill="#4a6080">XanBus RS485</text>
+
+  <!-- Arrow 1 -->
+  <line x1="162" y1="140" x2="200" y2="140" stroke="#00d4ff" stroke-width="1.5" stroke-dasharray="4,2"/>
+  <polygon points="200,136 208,140 200,144" fill="#00d4ff"/>
+
+  <!-- Bridge node -->
+  <rect x="210" y="110" width="110" height="60" fill="#0d1420" stroke="#00d4ff" stroke-width="2" rx="6"/>
+  <text x="265" y="133" text-anchor="middle" font-family="monospace" font-size="10" fill="#00d4ff">ESP32 BRIDGE</text>
+  <text x="265" y="148" text-anchor="middle" font-family="monospace" font-size="9" fill="#4a6080">MAX3485 + MCP2515</text>
+  <text x="265" y="162" text-anchor="middle" font-family="monospace" font-size="9" fill="#4a6080">WiFi → MQTT</text>
+
+  <!-- Arrow 2 CAN -->
+  <line x1="322" y1="135" x2="360" y2="135" stroke="#00ff88" stroke-width="1.5" stroke-dasharray="4,2"/>
+  <polygon points="360,131 368,135 360,139" fill="#00ff88"/>
+  <text x="342" y="128" text-anchor="middle" font-family="monospace" font-size="9" fill="#00ff88">CAN</text>
+
+  <!-- CAN Bus node -->
+  <rect x="370" y="115" width="90" height="40" fill="#0d1420" stroke="#00ff88" stroke-width="1.5" rx="6"/>
+  <text x="415" y="132" text-anchor="middle" font-family="monospace" font-size="10" fill="#00ff88">CAN 2.0B</text>
+  <text x="415" y="147" text-anchor="middle" font-family="monospace" font-size="9" fill="#4a6080">250 kbps</text>
+
+  <!-- Arrow 3 MQTT -->
+  <line x1="322" y1="152" x2="360" y2="152" stroke="#a855f7" stroke-width="1.5" stroke-dasharray="4,2"/>
+  <polygon points="360,148 368,152 360,156" fill="#a855f7"/>
+  <text x="342" y="168" text-anchor="middle" font-family="monospace" font-size="9" fill="#a855f7">MQTT</text>
+
+  <!-- MQTT node -->
+  <rect x="370" y="143" width="90" height="30" fill="#0d1420" stroke="#a855f7" stroke-width="1.5" rx="6"/>
+  <text x="415" y="163" text-anchor="middle" font-family="monospace" font-size="10" fill="#a855f7">MQTT / REST</text>
+
+  <!-- Arrow to GUI -->
+  <line x1="462" y1="157" x2="500" y2="157" stroke="#3b82f6" stroke-width="1.5" stroke-dasharray="4,2"/>
+  <polygon points="500,153 508,157 500,161" fill="#3b82f6"/>
+
+  <!-- GUI node -->
+  <rect x="510" y="115" width="110" height="60" fill="#0d1420" stroke="#3b82f6" stroke-width="1.5" rx="6"/>
+  <text x="565" y="133" text-anchor="middle" font-family="monospace" font-size="10" fill="#3b82f6">WEB DASHBOARD</text>
+  <text x="565" y="148" text-anchor="middle" font-family="monospace" font-size="9" fill="#4a6080">FastAPI + WebSocket</text>
+  <text x="565" y="163" text-anchor="middle" font-family="monospace" font-size="9" fill="#4a6080">SQLite Logger</text>
+
+  <!-- Battery and Inverter labels on right -->
+  <text x="660" y="130" font-family="monospace" font-size="11" fill="#10b981">🔋 Battery</text>
+  <text x="660" y="148" font-family="monospace" font-size="11" fill="#a855f7">⚡ Inverter</text>
+  <text x="660" y="166" font-family="monospace" font-size="11" fill="#ffd700">☀ Solar MPPT</text>
+  <text x="660" y="184" font-family="monospace" font-size="11" fill="#3b82f6">🔌 Charger</text>
+
+  <!-- Bottom accent bar -->
+  <rect x="0" y="197" width="900" height="3" fill="url(#acc)" rx="2"/>
+</svg>
